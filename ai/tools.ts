@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { analyzeMoatStrength, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
+import { analyzeManagementQuality, analyzeMoatStrength, analyzePredictability, calculateMungerValuation, generateMungerOutput, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
 
 export const weatherTool = tool({
   description: "Get the weather in a location",
@@ -14,19 +14,17 @@ export const weatherTool = tool({
 });
 
 export const charlieMungerTool = tool({
-  description: "",
+  description: "Analyze stocks using Charlie Munger's investing principles focusing on moat strength, management quality, predictability, and valuation.",
   parameters: z.object({
     ticker: z.string().describe("Stock ticker symbol to analyze"),
-    endDate: z.string().describe("End date for analysis in YYYY-MM-DD format"),
+    endDate: z.string().describe("End date for analysis in YYYY-MM-DD format")
   }),
   execute: async ({ ticker, endDate }) => {
     try {
-      const period = "annual";
       // 1. Fetch all required data
-      const metrics = await getFinancialMetrics(ticker, endDate, period, 10);
-      const marketCap = await getMarketCap(ticker, endDate);
+      const metrics = await getFinancialMetrics(ticker, endDate, "annual", 10);
       
-      const lineItems = await searchLineItems(
+      const financial_line_items = await searchLineItems(
         ticker, 
         [
           "revenue",
@@ -45,67 +43,74 @@ export const charlieMungerTool = tool({
           "goodwill_and_intangible_assets",
         ],
         endDate,
-        period,
+        "annual",
         10
       );
+      console.log('financial_line_items', financial_line_items[0]);
       
-      const insiderTrades = await getInsiderTrades(ticker, endDate);
-      const companyNews = await getCompanyNews(ticker, endDate);
+      const market_cap = await getMarketCap(ticker, endDate);
+      const insider_trades = await getInsiderTrades(ticker, endDate, null, 100);
+      // const company_news = await getCompanyNews(ticker, endDate, null, 100);
 
-      // // 2. Perform Munger-style analysis
-      const moatAnalysis = analyzeMoatStrength(metrics, lineItems);
-      // const managementAnalysis = analyzeManagementQuality(lineItems, insiderTrades);
-      // const predictabilityAnalysis = analyzePredictability(lineItems);
-      // const valuationAnalysis = calculateMungerValuation(lineItems, marketCap);
-      // const newsSentiment = analyzeNewsSentiment(companyNews);
+      // 2. Perform Munger-style analysis
+      const moat_analysis = analyzeMoatStrength(metrics, financial_line_items);
+      const management_analysis = analyzeManagementQuality(financial_line_items, insider_trades);
+      const predictability_analysis = analyzePredictability(financial_line_items);
+      const valuation_analysis = calculateMungerValuation(financial_line_items, market_cap);
+      // const news_sentiment = analyzeNewsSentiment(company_news);
 
-      // // 3. Generate overall rating and reasoning
-      // const overallScore = 
-      //   (moatAnalysis.score * 0.35) + 
-      //   (managementAnalysis.score * 0.25) + 
-      //   (predictabilityAnalysis.score * 0.25) + 
-      //   (valuationAnalysis.score * 0.15);
+      console.log("market_cap", market_cap);
+      console.log("insider_trades", insider_trades.length);
+      console.log("financial_line_items", financial_line_items.length);
+      console.log("moat_analysis", moat_analysis);
 
-      // let signal: "bullish" | "bearish" | "neutral";
-      // let confidence: number;
-
-      // // Determine signal based on score and valuation
-      // if (overallScore > 7.5 && valuationAnalysis.intrinsicValueRange?.reasonable > marketCap * 1.3) {
-      //   signal = "bullish";
-      //   confidence = Math.min(100, overallScore * 10);
-      // } else if (overallScore < 4 || valuationAnalysis.intrinsicValueRange?.conservative < marketCap * 0.7) {
-      //   signal = "bearish";
-      //   confidence = Math.min(100, (10 - overallScore) * 10);
-      // } else {
-      //   signal = "neutral";
-      //   confidence = 50 + Math.abs((overallScore - 5) * 10);
-      // }
-
-      // // 4. Return structured analysis
-      // return {
-      //   signal,
-      //   confidence,
-      //   reasoning: `Charlie Munger analysis for ${ticker}: Moat strength (${moatAnalysis.score.toFixed(1)}/10), Management quality (${managementAnalysis.score.toFixed(1)}/10), Business predictability (${predictabilityAnalysis.score.toFixed(1)}/10), and Valuation (${valuationAnalysis.score.toFixed(1)}/10). ${moatAnalysis.details}. ${managementAnalysis.details}. ${valuationAnalysis.details}.`,
-      //   details: {
-      //     moatAnalysis,
-      //     managementAnalysis,
-      //     predictabilityAnalysis,
-      //     valuationAnalysis,
-      //     newsSentiment
-      //   }
-      // };
-
-      const x = {
-        // metrics,
-        // marketCap,
-        // lineItems,
-        // insiderTrades,
-        // companyNews,
-        moatAnalysis,
+      // 3. Combine partial scores with Munger's weighting preferences
+      const total_score = (
+        moat_analysis.score * 0.35 +
+        management_analysis.score * 0.25 +
+        predictability_analysis.score * 0.25 +
+        valuation_analysis.score * 0.15
+      );
+      
+      // 4. Generate a simple signal based on the total score
+      let signal: "bullish" | "bearish" | "neutral";
+      if (total_score >= 7.5) {  // Munger has very high standards
+        signal = "bullish";
+      } else if (total_score <= 4.5) {
+        signal = "bearish";
+      } else {
+        signal = "neutral";
       }
-      console.log("Charlie Munger analysis data:", x);
-      return x;
 
+      // 5. Create analysis data similar to Python
+      const analysis_data = {
+        [ticker]: {
+          signal,
+          score: total_score,
+          max_score: 10,
+          moat_analysis,
+          management_analysis,
+          predictability_analysis,
+          valuation_analysis,
+          // news_sentiment
+        }
+      };
+
+      // 6. Generate Munger-style output using LLM
+      const munger_output = await generateMungerOutput(
+        ticker,
+        analysis_data,
+      );
+
+      console.log("Charlie Munger analysis output:", munger_output);
+
+      // 7. Return the result
+      return {
+        signal: munger_output.signal,
+        confidence: munger_output.confidence,
+        reasoning: munger_output.reasoning,
+        details: analysis_data[ticker]
+      };
     } catch (error) {
       console.error("Error in Charlie Munger analysis:", error);
       return {
@@ -115,5 +120,5 @@ export const charlieMungerTool = tool({
         details: {}
       };
     }
-  },
+  }
 });
