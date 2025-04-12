@@ -46,7 +46,6 @@ export const charlieMungerTool = tool({
         "annual",
         10
       );
-      console.log('financial_line_items', financial_line_items[0]);
       
       const market_cap = await getMarketCap(ticker, endDate);
       const insider_trades = await getInsiderTrades(ticker, endDate, null, 100);
@@ -58,11 +57,6 @@ export const charlieMungerTool = tool({
       const predictability_analysis = analyzePredictability(financial_line_items);
       const valuation_analysis = calculateMungerValuation(financial_line_items, market_cap);
       // const news_sentiment = analyzeNewsSentiment(company_news);
-
-      console.log("market_cap", market_cap);
-      console.log("insider_trades", insider_trades.length);
-      console.log("financial_line_items", financial_line_items.length);
-      console.log("moat_analysis", moat_analysis);
 
       // 3. Combine partial scores with Munger's weighting preferences
       const total_score = (

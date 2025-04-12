@@ -368,8 +368,6 @@ interface CompanyNews {
   ): { score: number; details: string } {
     let score = 0;
     const details: string[] = [];
-
-    console.log("financial_line_items", financialLineItems[0]);
     
     if (!metrics || !financialLineItems || metrics.length === 0 || financialLineItems.length === 0) {
       return {
