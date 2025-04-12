@@ -11,6 +11,7 @@
   "dependencies": {
     "@ai-sdk/groq": "^1.2.5",
     "@ai-sdk/react": "^1.2.6",
+    "@anthropic-ai/sdk": "^0.39.0",
     "@opentelemetry/api-logs": "^0.200.0",
     "@opentelemetry/instrumentation": "^0.200.0",
     "@opentelemetry/sdk-logs": "^0.200.0",

@@ -1,4 +1,6 @@
 import axios from 'axios';
+import Anthropic from "@anthropic-ai/sdk";
+
 
 interface FinancialMetrics {
     ticker: string;
@@ -121,14 +123,24 @@ export async function getMarketCap(
 
 // Define interfaces for LineItem data
 interface LineItem {
-    ticker: string;
-    line_item: string;
-    value: number;
-    report_date: string;
-    filing_date: string;
-    period: string;
-    unit: string;
-    currency: string;
+  ticker: string;
+  reporting_period: string;
+  period: 'annual';
+  currency: string;
+  outstanding_shares: number;
+  total_debt: number;
+  goodwill_and_intangible_assets: number,
+  cash_and_equivalents: number,
+  shareholders_equity: number,
+  free_cash_flow: number,
+  net_income: number,
+  capital_expenditure: number,
+  research_and_development: number,
+  operating_income: number,
+  revenue: number,
+  operating_margin: number,
+  return_on_invested_capital: number,
+  gross_margin: number
 }
   
 interface LineItemResponse {
@@ -356,6 +368,8 @@ interface CompanyNews {
   ): { score: number; details: string } {
     let score = 0;
     const details: string[] = [];
+
+    console.log("financial_line_items", financialLineItems[0]);
     
     if (!metrics || !financialLineItems || metrics.length === 0 || financialLineItems.length === 0) {
       return {
@@ -365,13 +379,9 @@ interface CompanyNews {
     }
     
     // 1. Return on Invested Capital (ROIC) analysis - Munger's favorite metric
-    const roicItems = financialLineItems.filter(item => 
-      item.line_item === "return_on_invested_capital" && item.value !== null
-    );
-    
-    if (roicItems.length > 0) {
+    if (financialLineItems.length > 0) {
       // Convert decimal values to percentage (e.g., 0.15 to 15%)
-      const roicValues = roicItems.map(item => item.value);
+      const roicValues = financialLineItems.map(item => item.return_on_invested_capital);
       
       // Check if ROIC consistently above 15% (Munger's threshold)
       const highRoicCount = roicValues.filter(r => r > 0.15).length;
@@ -393,12 +403,8 @@ interface CompanyNews {
     }
     
     // 2. Pricing power - check gross margin stability and trends
-    const grossMarginItems = financialLineItems.filter(item => 
-      item.line_item === "gross_margin" && item.value !== null
-    );
-    
-    if (grossMarginItems.length >= 3) {
-      const grossMargins = grossMarginItems.map(item => item.value);
+    if (financialLineItems.length >= 3) {
+      const grossMargins = financialLineItems.map(item => item.gross_margin);
       
       // Munger likes stable or improving gross margins
       let marginTrend = 0;
@@ -423,26 +429,15 @@ interface CompanyNews {
     
     // 3. Capital intensity - Munger prefers low capex businesses
     if (financialLineItems.length >= 3) {
-      const capexItems = financialLineItems.filter(item => 
-        item.line_item === "capital_expenditure" && item.value !== null
-      );
-      
-      const revenueItems = financialLineItems.filter(item => 
-        item.line_item === "revenue" && item.value !== null && item.value > 0
+      const capexRevenueItems = financialLineItems.filter(item => 
+        item.capital_expenditure && item.capital_expenditure !== null && item.revenue && item.revenue !== null && item.revenue > 0
       );
       
       const capexToRevenue: number[] = [];
-      
-      // Match capex to revenue for the same periods
-      for (let i = 0; i < capexItems.length; i++) {
-        const capexItem = capexItems[i];
-        const matchingRevenue = revenueItems.find(r => r.report_date === capexItem.report_date);
-        
-        if (matchingRevenue && matchingRevenue.value > 0) {
-          // Note: capital_expenditure is typically negative in financial statements
-          const capexRatio = Math.abs(capexItem.value) / matchingRevenue.value;
-          capexToRevenue.push(capexRatio);
-        }
+
+      for (const item of capexRevenueItems) {
+        const capexRatio = Math.abs(item.capital_expenditure) / item.revenue;
+        capexToRevenue.push(capexRatio)
       }
       
       if (capexToRevenue.length > 0) {
@@ -466,15 +461,15 @@ interface CompanyNews {
     
     // 4. Intangible assets - Munger values R&D and intellectual property
     const rAndDItems = financialLineItems.filter(item => 
-      item.line_item === "research_and_development" && item.value !== null
+      item.research_and_development && item.research_and_development !== null
     );
     
     const goodwillItems = financialLineItems.filter(item => 
-      item.line_item === "goodwill_and_intangible_assets" && item.value !== null
+      item.goodwill_and_intangible_assets && item.goodwill_and_intangible_assets !== null
     );
     
     if (rAndDItems.length > 0) {
-      const rAndDSum = rAndDItems.reduce((sum, item) => sum + item.value, 0);
+      const rAndDSum = rAndDItems.reduce((sum, item) => sum + item.research_and_development, 0);
       if (rAndDSum > 0) {  // If company is investing in R&D
         score += 1;
         details.push("Invests in R&D, building intellectual property");
@@ -514,144 +509,105 @@ export function analyzeManagementQuality(
   
   // 1. Capital allocation - Check FCF to net income ratio
   // Munger values companies that convert earnings to cash
-  const fcfItems = financialLineItems.filter(item => 
-    item.line_item === "free_cash_flow" && item.value !== null
+  const fcfAndNetIncomeItems = financialLineItems.filter(item => 
+    item.free_cash_flow && item.free_cash_flow !== null && item.net_income && item.net_income !== null
   );
+
   
-  const netIncomeItems = financialLineItems.filter(item => 
-    item.line_item === "net_income" && item.value !== null
-  );
-  
-  if (fcfItems.length > 0 && netIncomeItems.length > 0) {
-    // Match FCF and net income items by report date
-    const fcfToNiRatios: number[] = [];
+  const fcfToNiRatios: number[] = [];
+  for (const item of fcfAndNetIncomeItems) {
+    const fcf = item.free_cash_flow;
+    const netIncome = item.net_income;
     
-    for (const fcfItem of fcfItems) {
-      const matchingNiItem = netIncomeItems.find(item => 
-        item.report_date === fcfItem.report_date && item.value > 0
-      );
-      
-      if (matchingNiItem) {
-        fcfToNiRatios.push(fcfItem.value / matchingNiItem.value);
-      }
+    if (netIncome > 0) {
+      fcfToNiRatios.push(fcf / netIncome);
     }
+  }
+
+  if (fcfToNiRatios.length > 0) {
+    const avgRatio = fcfToNiRatios.reduce((sum, val) => sum + val, 0) / fcfToNiRatios.length;
     
-    if (fcfToNiRatios.length > 0) {
-      const avgRatio = fcfToNiRatios.reduce((sum, val) => sum + val, 0) / fcfToNiRatios.length;
-      
-      if (avgRatio > 1.1) {  // FCF > net income suggests good accounting
-        score += 3;
-        details.push(`Excellent cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
-      } else if (avgRatio > 0.9) {  // FCF roughly equals net income
-        score += 2;
-        details.push(`Good cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
-      } else if (avgRatio > 0.7) {  // FCF somewhat lower than net income
-        score += 1;
-        details.push(`Moderate cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
-      } else {
-        details.push(`Poor cash conversion: FCF/NI ratio of only ${avgRatio.toFixed(2)}`);
-      }
+    if (avgRatio > 1.1) {  // FCF > net income suggests good accounting
+      score += 3;
+      details.push(`Excellent cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
+    } else if (avgRatio > 0.9) {  // FCF roughly equals net income
+      score += 2;
+      details.push(`Good cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
+    } else if (avgRatio > 0.7) {  // FCF somewhat lower than net income
+      score += 1;
+      details.push(`Moderate cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
     } else {
-      details.push("Could not calculate FCF to Net Income ratios");
+      details.push(`Poor cash conversion: FCF/NI ratio of only ${avgRatio.toFixed(2)}`);
     }
   } else {
-    details.push("Missing FCF or Net Income data");
+    details.push("Could not calculate FCF to Net Income ratios");
   }
   
   // 2. Debt management - Munger is cautious about debt
-  const debtItems = financialLineItems.filter(item => 
-    item.line_item === "total_debt" && item.value !== null
+  const debtAndEquityItems = financialLineItems.filter(item => 
+    item.total_debt && item.total_debt !== null && item.shareholders_equity && item.shareholders_equity !== null
+  ).sort(
+    (a, b) => new Date(b.reporting_period).getTime() - new Date(a.reporting_period).getTime()
   );
-  
-  const equityItems = financialLineItems.filter(item => 
-    item.line_item === "shareholders_equity" && item.value !== null
-  );
-  
-  if (debtItems.length > 0 && equityItems.length > 0) {
-    // Sort to get most recent values first
-    const sortedDebtItems = [...debtItems].sort((a, b) => 
-      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
-    );
+
+  // Calculate D/E ratio for most recent period
+  const recentDebtValue = debtAndEquityItems[0].total_debt;
+  const recentEquityValue = debtAndEquityItems[0].shareholders_equity;
+  const recentDeRatio = recentDebtValue / recentEquityValue;
+
+  if (recentEquityValue > 0) {
+    const recentDeRatio = recentDebtValue / recentEquityValue;
     
-    const sortedEquityItems = [...equityItems].sort((a, b) => 
-      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
-    );
-    
-    // Calculate D/E ratio for most recent period
-    const recentDebtValue = sortedDebtItems[0].value;
-    const recentEquityValue = sortedEquityItems[0].value;
-    
-    if (recentEquityValue > 0) {
-      const recentDeRatio = recentDebtValue / recentEquityValue;
-      
-      if (recentDeRatio < 0.3) {  // Very low debt
-        score += 3;
-        details.push(`Conservative debt management: D/E ratio of ${recentDeRatio.toFixed(2)}`);
-      } else if (recentDeRatio < 0.7) {  // Moderate debt
-        score += 2;
-        details.push(`Prudent debt management: D/E ratio of ${recentDeRatio.toFixed(2)}`);
-      } else if (recentDeRatio < 1.5) {  // Higher but still reasonable debt
-        score += 1;
-        details.push(`Moderate debt level: D/E ratio of ${recentDeRatio.toFixed(2)}`);
-      } else {
-        details.push(`High debt level: D/E ratio of ${recentDeRatio.toFixed(2)}`);
-      }
+    if (recentDeRatio < 0.3) {  // Very low debt
+      score += 3;
+      details.push(`Conservative debt management: D/E ratio of ${recentDeRatio.toFixed(2)}`);
+    } else if (recentDeRatio < 0.7) {  // Moderate debt
+      score += 2;
+      details.push(`Prudent debt management: D/E ratio of ${recentDeRatio.toFixed(2)}`);
+    } else if (recentDeRatio < 1.5) {  // Higher but still reasonable debt
+      score += 1;
+      details.push(`Moderate debt level: D/E ratio of ${recentDeRatio.toFixed(2)}`);
     } else {
-      details.push("Negative or zero equity value");
+      details.push(`High debt level: D/E ratio of ${recentDeRatio.toFixed(2)}`);
     }
   } else {
-    details.push("Missing debt or equity data");
+    details.push("Negative or zero equity value");
   }
   
   // 3. Cash management efficiency - Munger values appropriate cash levels
-  const cashItems = financialLineItems.filter(item => 
-    item.line_item === "cash_and_equivalents" && item.value !== null
+  const cashAndRevenueItems = financialLineItems.filter(item => 
+    item.cash_and_equivalents && item.cash_and_equivalents !== null && item.revenue && item.revenue !== null
+  ).sort(
+    (a, b) => new Date(b.reporting_period).getTime() - new Date(a.reporting_period).getTime()
   );
-  
-  const revenueItems = financialLineItems.filter(item => 
-    item.line_item === "revenue" && item.value !== null
-  );
-  
-  if (cashItems.length > 0 && revenueItems.length > 0) {
-    // Sort to get most recent values first
-    const sortedCashItems = [...cashItems].sort((a, b) => 
-      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
-    );
+
+  // Calculate recent cash and revenue values
+  const recentCashValue = cashAndRevenueItems[0].cash_and_equivalents;
+  const recentRevenueValue = cashAndRevenueItems[0].revenue;
+
+  if (recentRevenueValue > 0) {
+    const cashToRevenue = recentCashValue / recentRevenueValue;
     
-    const sortedRevenueItems = [...revenueItems].sort((a, b) => 
-      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
-    );
-    
-    // Calculate cash to revenue ratio
-    const recentCashValue = sortedCashItems[0].value;
-    const recentRevenueValue = sortedRevenueItems[0].value;
-    
-    if (recentRevenueValue > 0) {
-      const cashToRevenue = recentCashValue / recentRevenueValue;
-      
-      if (0.1 <= cashToRevenue && cashToRevenue <= 0.25) {
-        // Goldilocks zone - not too much, not too little
-        score += 2;
-        details.push(`Prudent cash management: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
-      } else if ((0.05 <= cashToRevenue && cashToRevenue < 0.1) || 
-                (0.25 < cashToRevenue && cashToRevenue <= 0.4)) {
-        // Reasonable but not ideal
-        score += 1;
-        details.push(`Acceptable cash position: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
-      } else if (cashToRevenue > 0.4) {
-        // Too much cash - potentially inefficient capital allocation
-        details.push(`Excess cash reserves: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
-      } else {
-        // Too little cash - potentially risky
-        details.push(`Low cash reserves: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
-      }
+    if (0.1 <= cashToRevenue && cashToRevenue <= 0.25) {
+      // Goldilocks zone - not too much, not too little
+      score += 2;
+      details.push(`Prudent cash management: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
+    } else if ((0.05 <= cashToRevenue && cashToRevenue < 0.1) || 
+              (0.25 < cashToRevenue && cashToRevenue <= 0.4)) {
+      // Reasonable but not ideal
+      score += 1;
+      details.push(`Acceptable cash position: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
+    } else if (cashToRevenue > 0.4) {
+      // Too much cash - potentially inefficient capital allocation
+      details.push(`Excess cash reserves: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
     } else {
-      details.push("Zero or negative revenue");
+      // Too little cash - potentially risky
+      details.push(`Low cash reserves: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
     }
   } else {
-    details.push("Insufficient cash or revenue data");
+    details.push("Zero or negative revenue");
   }
-  
+
   // 4. Insider activity - Munger values skin in the game
   if (insiderTrades && insiderTrades.length > 0) {
     // Count buys vs. sells
@@ -691,17 +647,14 @@ export function analyzeManagementQuality(
   
   // 5. Consistency in share count - Munger prefers stable/decreasing shares
   const shareCountItems = financialLineItems.filter(item => 
-    item.line_item === "outstanding_shares" && item.value !== null
+    item.outstanding_shares && item.outstanding_shares !== null
+  ).sort(
+    (a, b) => new Date(b.reporting_period).getTime() - new Date(a.reporting_period).getTime()
   );
   
   if (shareCountItems.length >= 3) {
-    // Sort by report date (oldest to newest)
-    const sortedShares = [...shareCountItems].sort((a, b) => 
-      new Date(a.report_date).getTime() - new Date(b.report_date).getTime()
-    );
-    
-    const oldestCount = sortedShares[0].value;
-    const newestCount = sortedShares[sortedShares.length - 1].value;
+    const oldestCount = shareCountItems[0].outstanding_shares;
+    const newestCount = shareCountItems[shareCountItems.length - 1].outstanding_shares;
     
     if (newestCount < oldestCount * 0.95) {  // 5%+ reduction in shares
       score += 2;
@@ -747,16 +700,13 @@ export function analyzePredictability(
   
   // 1. Revenue stability and growth
   const revenueItems = financialLineItems.filter(item => 
-    item.line_item === "revenue" && item.value !== null
+    item.revenue && item.revenue !== null
+  ).sort((a, b) => 
+    new Date(b.reporting_period).getTime() - new Date(a.reporting_period).getTime()
   );
   
   if (revenueItems.length >= 5) {
-    // Sort by report date (newest to oldest)
-    const sortedRevenueItems = [...revenueItems].sort((a, b) => 
-      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
-    );
-    
-    const revenues = sortedRevenueItems.map(item => item.value);
+    const revenues = revenueItems.map(item => item.revenue);
     
     // Calculate year-over-year growth rates
     const growthRates: number[] = [];
@@ -798,11 +748,11 @@ export function analyzePredictability(
   
   // 2. Operating income stability
   const opIncomeItems = financialLineItems.filter(item => 
-    item.line_item === "operating_income" && item.value !== null
+    item.operating_income && item.operating_income !== null
   );
   
   if (opIncomeItems.length >= 5) {
-    const opIncomes = opIncomeItems.map(item => item.value);
+    const opIncomes = opIncomeItems.map(item => item.operating_income);
     
     // Count positive operating income periods
     const positivePeriods = opIncomes.filter(income => income > 0).length;
@@ -828,11 +778,11 @@ export function analyzePredictability(
   
   // 3. Margin consistency - Munger values stable margins
   const opMarginItems = financialLineItems.filter(item => 
-    item.line_item === "operating_margin" && item.value !== null
+    item.operating_margin && item.operating_margin !== null
   );
   
   if (opMarginItems.length >= 5) {
-    const opMargins = opMarginItems.map(item => item.value);
+    const opMargins = opMarginItems.map(item => item.operating_margin);
     
     // Calculate margin volatility
     const avgMargin = opMargins.reduce((sum, margin) => sum + margin, 0) / opMargins.length;
@@ -855,11 +805,11 @@ export function analyzePredictability(
   
   // 4. Cash generation reliability
   const fcfItems = financialLineItems.filter(item => 
-    item.line_item === "free_cash_flow" && item.value !== null
+    item.free_cash_flow && item.free_cash_flow !== null
   );
   
   if (fcfItems.length >= 5) {
-    const fcfValues = fcfItems.map(item => item.value);
+    const fcfValues = fcfItems.map(item => item.free_cash_flow);
     
     // Count positive FCF periods
     const positiveFcfPeriods = fcfValues.filter(fcf => fcf > 0).length;
@@ -919,8 +869,8 @@ export function calculateMungerValuation(
   // Get FCF values (Munger's preferred "owner earnings" metric)
   const fcfValues: number[] = [];
   for (const item of financialLineItems) {
-    if (item.line_item === "free_cash_flow" && item.value !== null) {
-      fcfValues.push(item.value);
+    if (item.free_cash_flow && item.free_cash_flow !== null) {
+      fcfValues.push(item.free_cash_flow);
     }
   }
   
@@ -1033,9 +983,9 @@ interface CharlieMungerSignal {
 export async function generateMungerOutput(
   ticker: string,
   analysis_data: Record<string, any>,
-  model_name: string,
-  model_provider: string
 ): Promise<CharlieMungerSignal> {
+
+  console.log("analysis_data", analysis_data);
   // Create system prompt
   const systemPrompt = `You are a Charlie Munger AI agent, making investment decisions using his principles:
 
@@ -1084,7 +1034,7 @@ export async function generateMungerOutput(
     // Call LLM with prompt
     // This is a simplified version - in a real implementation you would use your
     // preferred LLM client like OpenAI, Anthropic, etc.
-    const response = await callLLM(systemPrompt, userPrompt, model_name, model_provider);
+    const response = await callLLM(systemPrompt, userPrompt);
     return parseResponse(response);
   } catch (error) {
     console.error("Error generating Munger output:", error);
@@ -1094,4 +1044,52 @@ export async function generateMungerOutput(
       reasoning: "Error in analysis, defaulting to neutral"
     };
   }
+}
+
+async function callLLM(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<Anthropic.Messages.Message> {
+  const anthropic = new Anthropic();
+
+  const msg = await anthropic.messages.create({
+    model: "claude-3-7-sonnet-20250219",
+    max_tokens: 1000,
+    temperature: 1,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: userPrompt,
+          }
+        ]
+      }
+    ]
+  });
+  return msg;
+}
+
+function parseResponse(response: Anthropic.Messages.Message): CharlieMungerSignal {
+  const content = response.content[0];
+  let parsedResponse: CharlieMungerSignal;
+  switch (content.type) {
+    case "text":
+      let cleanedText = content.text
+        .replace(/```json\n?|\n?```/g, "")
+        .trim();
+      parsedResponse = JSON.parse(cleanedText);
+      break;
+    default:
+      throw new Error("Unexpected response format");
+  }
+
+
+  return {
+    signal: parsedResponse.signal,
+    confidence: parsedResponse.confidence,
+    reasoning: parsedResponse.reasoning
+  };
 }

@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { analyzeManagementQuality, analyzeMoatStrength, analyzePredictability, calculateMungerValuation, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
+import { analyzeManagementQuality, analyzeMoatStrength, analyzePredictability, calculateMungerValuation, generateMungerOutput, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
 
 export const weatherTool = tool({
   description: "Get the weather in a location",
@@ -46,6 +46,7 @@ export const charlieMungerTool = tool({
         "annual",
         10
       );
+      console.log('financial_line_items', financial_line_items[0]);
       
       const market_cap = await getMarketCap(ticker, endDate);
       const insider_trades = await getInsiderTrades(ticker, endDate, null, 100);
@@ -57,6 +58,11 @@ export const charlieMungerTool = tool({
       const predictability_analysis = analyzePredictability(financial_line_items);
       const valuation_analysis = calculateMungerValuation(financial_line_items, market_cap);
       // const news_sentiment = analyzeNewsSentiment(company_news);
+
+      console.log("market_cap", market_cap);
+      console.log("insider_trades", insider_trades.length);
+      console.log("financial_line_items", financial_line_items.length);
+      console.log("moat_analysis", moat_analysis);
 
       // 3. Combine partial scores with Munger's weighting preferences
       const total_score = (
@@ -86,7 +92,7 @@ export const charlieMungerTool = tool({
           management_analysis,
           predictability_analysis,
           valuation_analysis,
-          news_sentiment
+          // news_sentiment
         }
       };
 
@@ -94,9 +100,9 @@ export const charlieMungerTool = tool({
       const munger_output = await generateMungerOutput(
         ticker,
         analysis_data,
-        "gpt-4o", // Using a default model
-        "openai"  // Using a default provider
       );
+
+      console.log("Charlie Munger analysis output:", munger_output);
 
       // 7. Return the result
       return {
