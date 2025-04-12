@@ -1,5 +1,5 @@
 import { model, modelID } from "@/ai/providers";
-import { charlieMungerTool, weatherTool } from "@/ai/tools";
+import { charlieMungerTool } from "@/ai/tools";
 import { streamText, UIMessage } from "ai";
 
 // Allow streaming responses up to 30 seconds
@@ -16,7 +16,6 @@ export async function POST(req: Request) {
     system: "You are a helpful assistant.",
     messages,
     tools: {
-      getWeather: weatherTool,
       charlieMunger: charlieMungerTool,
     },
     experimental_telemetry: {

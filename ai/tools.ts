@@ -2,17 +2,6 @@ import { tool } from "ai";
 import { z } from "zod";
 import { analyzeManagementQuality, analyzeMoatStrength, analyzePredictability, calculateMungerValuation, generateMungerOutput, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
 
-export const weatherTool = tool({
-  description: "Get the weather in a location",
-  parameters: z.object({
-    location: z.string().describe("The location to get the weather for"),
-  }),
-  execute: async ({ location }) => ({
-    location,
-    temperature: 72 + Math.floor(Math.random() * 21) - 10,
-  }),
-});
-
 export const charlieMungerTool = tool({
   description: "Analyze stocks using Charlie Munger's investing principles focusing on moat strength, management quality, predictability, and valuation.",
   parameters: z.object({
