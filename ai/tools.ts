@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { getFinancialMetrics } from "./utils";
+import { analyzeMoatStrength, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
 
 export const weatherTool = tool({
   description: "Get the weather in a location",
@@ -24,36 +24,36 @@ export const charlieMungerTool = tool({
       const period = "annual";
       // 1. Fetch all required data
       const metrics = await getFinancialMetrics(ticker, endDate, period, 10);
-      // const marketCap = await getMarketCap(ticker, endDate);
+      const marketCap = await getMarketCap(ticker, endDate);
       
-      // const lineItems = await searchLineItems(
-      //   ticker, 
-      //   [
-      //     "revenue",
-      //     "net_income",
-      //     "operating_income",
-      //     "return_on_invested_capital",
-      //     "gross_margin",
-      //     "operating_margin",
-      //     "free_cash_flow",
-      //     "capital_expenditure",
-      //     "cash_and_equivalents",
-      //     "total_debt",
-      //     "shareholders_equity",
-      //     "outstanding_shares",
-      //     "research_and_development",
-      //     "goodwill_and_intangible_assets",
-      //   ],
-      //   endDate,
-      //   period,
-      //   10
-      // );
+      const lineItems = await searchLineItems(
+        ticker, 
+        [
+          "revenue",
+          "net_income",
+          "operating_income",
+          "return_on_invested_capital",
+          "gross_margin",
+          "operating_margin",
+          "free_cash_flow",
+          "capital_expenditure",
+          "cash_and_equivalents",
+          "total_debt",
+          "shareholders_equity",
+          "outstanding_shares",
+          "research_and_development",
+          "goodwill_and_intangible_assets",
+        ],
+        endDate,
+        period,
+        10
+      );
       
-      // const insiderTrades = await getInsiderTrades(ticker, endDate);
-      // const companyNews = await getCompanyNews(ticker, endDate);
+      const insiderTrades = await getInsiderTrades(ticker, endDate);
+      const companyNews = await getCompanyNews(ticker, endDate);
 
       // // 2. Perform Munger-style analysis
-      // const moatAnalysis = analyzeMoatStrength(metrics, lineItems);
+      const moatAnalysis = analyzeMoatStrength(metrics, lineItems);
       // const managementAnalysis = analyzeManagementQuality(lineItems, insiderTrades);
       // const predictabilityAnalysis = analyzePredictability(lineItems);
       // const valuationAnalysis = calculateMungerValuation(lineItems, marketCap);
@@ -95,9 +95,17 @@ export const charlieMungerTool = tool({
       //   }
       // };
 
-      return {
-        ...metrics
+      const x = {
+        // metrics,
+        // marketCap,
+        // lineItems,
+        // insiderTrades,
+        // companyNews,
+        moatAnalysis,
       }
+      console.log("Charlie Munger analysis data:", x);
+      return x;
+
     } catch (error) {
       console.error("Error in Charlie Munger analysis:", error);
       return {
