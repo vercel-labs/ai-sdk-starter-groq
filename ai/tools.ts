@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { analyzeManagementQuality, analyzeMoatStrength, analyzePredictability, calculateMungerValuation, generateMungerOutput, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
+import { analyzeManagementQuality, analyzeMoatStrength, analyzePredictability, calculateMungerValuation, generateInvestmentMemo, generateMungerOutput, getCompanyNews, getFinancialMetrics, getInsiderTrades, getMarketCap, searchLineItems } from "./utils";
 
 export const charlieMungerTool = tool({
   description: "Analyze stocks using Charlie Munger's investing principles focusing on moat strength, management quality, predictability, and valuation.",
@@ -101,6 +101,71 @@ export const charlieMungerTool = tool({
         confidence: 0,
         reasoning: `Analysis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
         details: {}
+      };
+    }
+  }
+});
+
+export const investmentMemoTool = tool({
+  description: "Generates a comprehensive investment memo for a given stock ticker, including business description, competitive landscape, financial analysis, growth prospects, and risk assessment.",
+  parameters: z.object({
+    ticker: z.string().describe("Stock ticker symbol to analyze"),
+    endDate: z.string().describe("End date for analysis in YYYY-MM-DD format"),
+    includeSources: z.boolean().optional().describe("Whether to include source references in the memo"),
+    extraDocuments: z.array(z.string()).optional().describe("Additional document URLs or paths to analyze")
+  }),
+  execute: async ({ ticker, endDate, includeSources = true, extraDocuments = [] }) => {
+    try {
+      // 1. Fetch financial data (reuse existing API calls from charlieMungerTool)
+      const metrics = await getFinancialMetrics(ticker, endDate, "annual", 10);
+      const financial_line_items = await searchLineItems(
+        ticker,
+        [
+          // Include all necessary financial metrics
+          "revenue", "net_income", "operating_income", "return_on_invested_capital",
+          "gross_margin", "operating_margin", "free_cash_flow", "capital_expenditure",
+          "cash_and_equivalents", "total_debt", "shareholders_equity", "outstanding_shares",
+          "research_and_development", "goodwill_and_intangible_assets"
+        ],
+        endDate,
+        "annual",
+        10
+      );
+
+      const market_cap = await getMarketCap(ticker, endDate);
+      const insider_trades = await getInsiderTrades(ticker, endDate, null, 100);
+      const company_news = await getCompanyNews(ticker, endDate, null, 100);
+
+      // 2. Get additional data from external sources
+      // - Fetch company description, competitors, industry analysis
+      // - Get latest earnings call transcripts (can be implemented as separate functions)
+
+      // 3. Generate content for each section of the memo
+      const memo = await generateInvestmentMemo(
+        ticker,
+        {
+          financialMetrics: metrics,
+          lineItems: financial_line_items,
+          marketCap: market_cap,
+          insiderTrades: insider_trades,
+          news: company_news,
+          extraDocuments: extraDocuments
+        }
+      );
+
+      // 4. Return the memo content and metadata
+      return {
+        ticker,
+        title: `Investment Memo: ${memo.companyName} (${ticker})`,
+        generationDate: new Date().toISOString(),
+        content: memo.content,
+        sections: memo.sections,
+        summary: memo.summary
+      };
+    } catch (error) {
+      console.error("Error generating investment memo:", error);
+      return {
+        error: error instanceof Error ? error.message : "Unknown error generating memo"
       };
     }
   }

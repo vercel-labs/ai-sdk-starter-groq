@@ -1091,3 +1091,92 @@ function parseResponse(response: Anthropic.Messages.Message): CharlieMungerSigna
     reasoning: parsedResponse.reasoning
   };
 }
+
+interface MemoSection {
+  title: string;
+  content: string;
+}
+
+interface InvestmentMemo {
+  companyName: string;
+  ticker: string;
+  summary: string;
+  content: string;
+  sections: MemoSection[];
+}
+
+export async function generateInvestmentMemo(
+  ticker: string,
+  data: {
+    financialMetrics: FinancialMetrics[],
+    lineItems: LineItem[],
+    marketCap: number | null,
+    insiderTrades: InsiderTrade[],
+    news: CompanyNews[],
+    extraDocuments: string[]
+  }
+): Promise<InvestmentMemo> {
+  // Create the memo structure
+  const sections: MemoSection[] = [
+    { title: "Business Description", content: "" },
+    { title: "Competitive Landscape", content: "" },
+    { title: "Financial Analysis", content: "" },
+    { title: "Growth Prospects", content: "" },
+    { title: "Opportunities & Risks", content: "" }
+  ];
+
+  // Perform the existing Munger-style analysis to incorporate in different sections
+  const moat_analysis = analyzeMoatStrength(data.financialMetrics, data.lineItems);
+  const management_analysis = analyzeManagementQuality(data.lineItems, data.insiderTrades);
+  const predictability_analysis = analyzePredictability(data.lineItems);
+  const valuation_analysis = calculateMungerValuation(data.lineItems, data.marketCap);
+
+  // Generate prompt for LLM to create each section
+  const companyName = await getCompanyName(ticker); // New function to get company name
+
+  // Use Anthropic to generate each section (similar pattern to generateMungerOutput)
+  const businessDescription = await generateBusinessDescriptionSection(ticker, companyName, data);
+  const competitiveLandscape = await generateCompetitiveLandscapeSection(ticker, companyName, data, moat_analysis);
+  const financialAnalysis = await generateFinancialAnalysisSection(ticker, companyName, data, management_analysis, valuation_analysis);
+  const growthProspects = await generateGrowthProspectsSection(ticker, companyName, data, predictability_analysis);
+  const opportunitiesRisks = await generateOpportunitiesRisksSection(ticker, companyName, data);
+
+  // Assign content to each section
+  sections[0].content = businessDescription;
+  sections[1].content = competitiveLandscape;
+  sections[2].content = financialAnalysis;
+  sections[3].content = growthProspects;
+  sections[4].content = opportunitiesRisks;
+
+  // Generate executive summary
+  const summary = await generateExecutiveSummary(ticker, companyName, sections);
+
+  // Compile the full memo content
+  const content = `# Investment Memo: ${companyName} (${ticker})\n\n## Executive Summary\n\n${summary}\n\n` +
+    sections.map(section => `## ${section.title}\n\n${section.content}`).join('\n\n');
+
+  return {
+    companyName,
+    ticker,
+    summary,
+    content,
+    sections
+  };
+}
+
+// Implement each section generator function following the same pattern
+// as the existing generateMungerOutput function
+async function generateBusinessDescriptionSection(ticker: string, companyName: string, data: any): Promise<string> {
+  const systemPrompt = `You are a professional investment analyst creating a Business Description section for an investment memo.`;
+  const userPrompt = `Create a comprehensive business description for ${companyName} (${ticker}) based on the following data...`;
+
+  const response = await callLLM(systemPrompt, userPrompt);
+  return extractTextContent(response);
+}
+
+// Similar implementations for other section generators...
+
+function extractTextContent(response: any): string {
+  const content = response.content[0];
+  return content.type === "text" ? content.text : "";
+}

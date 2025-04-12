@@ -17,6 +17,7 @@ import {
   StopCircle,
 } from "lucide-react";
 import { SpinnerIcon } from "./icons";
+import { InvestmentMemo } from "./investment-memo";
 
 interface ReasoningPart {
   type: "reasoning";
@@ -152,6 +153,28 @@ const PurePreviewMessage = ({
             {message.parts?.map((part, i) => {
               switch (part.type) {
                 case "text":
+                  if (part.text.includes("Investment Memo:") && message.role === "assistant") {
+                    try {
+                      // Extract memo data if it exists - this assumes the JSON is in a code block
+                      const memoMatch = part.text.match(/```json\n([\s\S]*?)\n```/);
+                      if (memoMatch && memoMatch[1]) {
+                        const memoData = JSON.parse(memoMatch[1]);
+                        return (
+                          <motion.div
+                            initial={{ y: 5, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            key={`message-${message.id}-part-${i}`}
+                            className="w-full"
+                          >
+                            <InvestmentMemo memo={memoData} />
+                          </motion.div>
+                        );
+                      }
+                    } catch (e) {
+                      // Fall back to regular text display if memo parsing fails
+                    }
+                  }
+                  
                   return (
                     <motion.div
                       initial={{ y: 5, opacity: 0 }}
