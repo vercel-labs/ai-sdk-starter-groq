@@ -494,3 +494,604 @@ interface CompanyNews {
       details: details.join("; ")
     };
   }
+
+/**
+ * Evaluate management quality using Munger's criteria
+ */
+export function analyzeManagementQuality(
+  financialLineItems: LineItem[], 
+  insiderTrades: InsiderTrade[]
+): { score: number; details: string } {
+  let score = 0;
+  const details: string[] = [];
+  
+  if (!financialLineItems || financialLineItems.length === 0) {
+    return {
+      score: 0,
+      details: "Insufficient data to analyze management quality"
+    };
+  }
+  
+  // 1. Capital allocation - Check FCF to net income ratio
+  // Munger values companies that convert earnings to cash
+  const fcfItems = financialLineItems.filter(item => 
+    item.line_item === "free_cash_flow" && item.value !== null
+  );
+  
+  const netIncomeItems = financialLineItems.filter(item => 
+    item.line_item === "net_income" && item.value !== null
+  );
+  
+  if (fcfItems.length > 0 && netIncomeItems.length > 0) {
+    // Match FCF and net income items by report date
+    const fcfToNiRatios: number[] = [];
+    
+    for (const fcfItem of fcfItems) {
+      const matchingNiItem = netIncomeItems.find(item => 
+        item.report_date === fcfItem.report_date && item.value > 0
+      );
+      
+      if (matchingNiItem) {
+        fcfToNiRatios.push(fcfItem.value / matchingNiItem.value);
+      }
+    }
+    
+    if (fcfToNiRatios.length > 0) {
+      const avgRatio = fcfToNiRatios.reduce((sum, val) => sum + val, 0) / fcfToNiRatios.length;
+      
+      if (avgRatio > 1.1) {  // FCF > net income suggests good accounting
+        score += 3;
+        details.push(`Excellent cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
+      } else if (avgRatio > 0.9) {  // FCF roughly equals net income
+        score += 2;
+        details.push(`Good cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
+      } else if (avgRatio > 0.7) {  // FCF somewhat lower than net income
+        score += 1;
+        details.push(`Moderate cash conversion: FCF/NI ratio of ${avgRatio.toFixed(2)}`);
+      } else {
+        details.push(`Poor cash conversion: FCF/NI ratio of only ${avgRatio.toFixed(2)}`);
+      }
+    } else {
+      details.push("Could not calculate FCF to Net Income ratios");
+    }
+  } else {
+    details.push("Missing FCF or Net Income data");
+  }
+  
+  // 2. Debt management - Munger is cautious about debt
+  const debtItems = financialLineItems.filter(item => 
+    item.line_item === "total_debt" && item.value !== null
+  );
+  
+  const equityItems = financialLineItems.filter(item => 
+    item.line_item === "shareholders_equity" && item.value !== null
+  );
+  
+  if (debtItems.length > 0 && equityItems.length > 0) {
+    // Sort to get most recent values first
+    const sortedDebtItems = [...debtItems].sort((a, b) => 
+      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
+    );
+    
+    const sortedEquityItems = [...equityItems].sort((a, b) => 
+      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
+    );
+    
+    // Calculate D/E ratio for most recent period
+    const recentDebtValue = sortedDebtItems[0].value;
+    const recentEquityValue = sortedEquityItems[0].value;
+    
+    if (recentEquityValue > 0) {
+      const recentDeRatio = recentDebtValue / recentEquityValue;
+      
+      if (recentDeRatio < 0.3) {  // Very low debt
+        score += 3;
+        details.push(`Conservative debt management: D/E ratio of ${recentDeRatio.toFixed(2)}`);
+      } else if (recentDeRatio < 0.7) {  // Moderate debt
+        score += 2;
+        details.push(`Prudent debt management: D/E ratio of ${recentDeRatio.toFixed(2)}`);
+      } else if (recentDeRatio < 1.5) {  // Higher but still reasonable debt
+        score += 1;
+        details.push(`Moderate debt level: D/E ratio of ${recentDeRatio.toFixed(2)}`);
+      } else {
+        details.push(`High debt level: D/E ratio of ${recentDeRatio.toFixed(2)}`);
+      }
+    } else {
+      details.push("Negative or zero equity value");
+    }
+  } else {
+    details.push("Missing debt or equity data");
+  }
+  
+  // 3. Cash management efficiency - Munger values appropriate cash levels
+  const cashItems = financialLineItems.filter(item => 
+    item.line_item === "cash_and_equivalents" && item.value !== null
+  );
+  
+  const revenueItems = financialLineItems.filter(item => 
+    item.line_item === "revenue" && item.value !== null
+  );
+  
+  if (cashItems.length > 0 && revenueItems.length > 0) {
+    // Sort to get most recent values first
+    const sortedCashItems = [...cashItems].sort((a, b) => 
+      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
+    );
+    
+    const sortedRevenueItems = [...revenueItems].sort((a, b) => 
+      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
+    );
+    
+    // Calculate cash to revenue ratio
+    const recentCashValue = sortedCashItems[0].value;
+    const recentRevenueValue = sortedRevenueItems[0].value;
+    
+    if (recentRevenueValue > 0) {
+      const cashToRevenue = recentCashValue / recentRevenueValue;
+      
+      if (0.1 <= cashToRevenue && cashToRevenue <= 0.25) {
+        // Goldilocks zone - not too much, not too little
+        score += 2;
+        details.push(`Prudent cash management: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
+      } else if ((0.05 <= cashToRevenue && cashToRevenue < 0.1) || 
+                (0.25 < cashToRevenue && cashToRevenue <= 0.4)) {
+        // Reasonable but not ideal
+        score += 1;
+        details.push(`Acceptable cash position: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
+      } else if (cashToRevenue > 0.4) {
+        // Too much cash - potentially inefficient capital allocation
+        details.push(`Excess cash reserves: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
+      } else {
+        // Too little cash - potentially risky
+        details.push(`Low cash reserves: Cash/Revenue ratio of ${cashToRevenue.toFixed(2)}`);
+      }
+    } else {
+      details.push("Zero or negative revenue");
+    }
+  } else {
+    details.push("Insufficient cash or revenue data");
+  }
+  
+  // 4. Insider activity - Munger values skin in the game
+  if (insiderTrades && insiderTrades.length > 0) {
+    // Count buys vs. sells
+    const buys = insiderTrades.filter(trade => 
+      trade.transaction_type && 
+      ['buy', 'purchase'].includes(trade.transaction_type.toLowerCase())
+    ).length;
+    
+    const sells = insiderTrades.filter(trade => 
+      trade.transaction_type && 
+      ['sell', 'sale'].includes(trade.transaction_type.toLowerCase())
+    ).length;
+    
+    // Calculate the buy ratio
+    const totalTrades = buys + sells;
+    if (totalTrades > 0) {
+      const buyRatio = buys / totalTrades;
+      
+      if (buyRatio > 0.7) {  // Strong insider buying
+        score += 2;
+        details.push(`Strong insider buying: ${buys}/${totalTrades} transactions are purchases`);
+      } else if (buyRatio > 0.4) {  // Balanced insider activity
+        score += 1;
+        details.push(`Balanced insider trading: ${buys}/${totalTrades} transactions are purchases`);
+      } else if (buyRatio < 0.1 && sells > 5) {  // Heavy selling
+        score -= 1;  // Penalty for excessive selling
+        details.push(`Concerning insider selling: ${sells}/${totalTrades} transactions are sales`);
+      } else {
+        details.push(`Mixed insider activity: ${buys}/${totalTrades} transactions are purchases`);
+      }
+    } else {
+      details.push("No recorded insider transactions");
+    }
+  } else {
+    details.push("No insider trading data available");
+  }
+  
+  // 5. Consistency in share count - Munger prefers stable/decreasing shares
+  const shareCountItems = financialLineItems.filter(item => 
+    item.line_item === "outstanding_shares" && item.value !== null
+  );
+  
+  if (shareCountItems.length >= 3) {
+    // Sort by report date (oldest to newest)
+    const sortedShares = [...shareCountItems].sort((a, b) => 
+      new Date(a.report_date).getTime() - new Date(b.report_date).getTime()
+    );
+    
+    const oldestCount = sortedShares[0].value;
+    const newestCount = sortedShares[sortedShares.length - 1].value;
+    
+    if (newestCount < oldestCount * 0.95) {  // 5%+ reduction in shares
+      score += 2;
+      details.push("Shareholder-friendly: Reducing share count over time");
+    } else if (newestCount < oldestCount * 1.05) {  // Stable share count
+      score += 1;
+      details.push("Stable share count: Limited dilution");
+    } else if (newestCount > oldestCount * 1.2) {  // >20% dilution
+      score -= 1;  // Penalty for excessive dilution
+      details.push("Concerning dilution: Share count increased significantly");
+    } else {
+      details.push("Moderate share count increase over time");
+    }
+  } else {
+    details.push("Insufficient share count data");
+  }
+  
+  // Scale score to 0-10 range
+  // Maximum possible raw score would be 12 (3+3+2+2+2)
+  const finalScore = Math.max(0, Math.min(10, score * 10 / 12));
+  
+  return {
+    score: finalScore,
+    details: details.join("; ")
+  };
+}
+
+/**
+ * Assess the predictability of the business using Munger's approach
+ */
+export function analyzePredictability(
+  financialLineItems: LineItem[]
+): { score: number; details: string } {
+  let score = 0;
+  const details: string[] = [];
+  
+  if (!financialLineItems || financialLineItems.length < 5) {
+    return {
+      score: 0,
+      details: "Insufficient data to analyze business predictability (need 5+ years)"
+    };
+  }
+  
+  // 1. Revenue stability and growth
+  const revenueItems = financialLineItems.filter(item => 
+    item.line_item === "revenue" && item.value !== null
+  );
+  
+  if (revenueItems.length >= 5) {
+    // Sort by report date (newest to oldest)
+    const sortedRevenueItems = [...revenueItems].sort((a, b) => 
+      new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
+    );
+    
+    const revenues = sortedRevenueItems.map(item => item.value);
+    
+    // Calculate year-over-year growth rates
+    const growthRates: number[] = [];
+    for (let i = 0; i < revenues.length - 1; i++) {
+      if (revenues[i+1] > 0) {
+        growthRates.push(revenues[i] / revenues[i+1] - 1);
+      }
+    }
+    
+    if (growthRates.length >= 4) {
+      const avgGrowth = growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length;
+      
+      // Calculate growth volatility (average deviation from mean growth)
+      const growthVolatility = growthRates.reduce(
+        (sum, rate) => sum + Math.abs(rate - avgGrowth), 0
+      ) / growthRates.length;
+      
+      if (avgGrowth > 0.05 && growthVolatility < 0.1) {
+        // Steady, consistent growth (Munger loves this)
+        score += 3;
+        details.push(`Highly predictable revenue: ${(avgGrowth * 100).toFixed(1)}% avg growth with low volatility`);
+      } else if (avgGrowth > 0 && growthVolatility < 0.2) {
+        // Positive but somewhat volatile growth
+        score += 2;
+        details.push(`Moderately predictable revenue: ${(avgGrowth * 100).toFixed(1)}% avg growth with some volatility`);
+      } else if (avgGrowth > 0) {
+        // Growing but unpredictable
+        score += 1;
+        details.push(`Growing but less predictable revenue: ${(avgGrowth * 100).toFixed(1)}% avg growth with high volatility`);
+      } else {
+        details.push(`Declining or highly unpredictable revenue: ${(avgGrowth * 100).toFixed(1)}% avg growth`);
+      }
+    } else {
+      details.push("Insufficient revenue growth history");
+    }
+  } else {
+    details.push("Insufficient revenue history for predictability analysis");
+  }
+  
+  // 2. Operating income stability
+  const opIncomeItems = financialLineItems.filter(item => 
+    item.line_item === "operating_income" && item.value !== null
+  );
+  
+  if (opIncomeItems.length >= 5) {
+    const opIncomes = opIncomeItems.map(item => item.value);
+    
+    // Count positive operating income periods
+    const positivePeriods = opIncomes.filter(income => income > 0).length;
+    
+    if (positivePeriods === opIncomes.length) {
+      // Consistently profitable operations
+      score += 3;
+      details.push("Highly predictable operations: Operating income positive in all periods");
+    } else if (positivePeriods >= opIncomes.length * 0.8) {
+      // Mostly profitable operations
+      score += 2;
+      details.push(`Predictable operations: Operating income positive in ${positivePeriods}/${opIncomes.length} periods`);
+    } else if (positivePeriods >= opIncomes.length * 0.6) {
+      // Somewhat profitable operations
+      score += 1;
+      details.push(`Somewhat predictable operations: Operating income positive in ${positivePeriods}/${opIncomes.length} periods`);
+    } else {
+      details.push(`Unpredictable operations: Operating income positive in only ${positivePeriods}/${opIncomes.length} periods`);
+    }
+  } else {
+    details.push("Insufficient operating income history");
+  }
+  
+  // 3. Margin consistency - Munger values stable margins
+  const opMarginItems = financialLineItems.filter(item => 
+    item.line_item === "operating_margin" && item.value !== null
+  );
+  
+  if (opMarginItems.length >= 5) {
+    const opMargins = opMarginItems.map(item => item.value);
+    
+    // Calculate margin volatility
+    const avgMargin = opMargins.reduce((sum, margin) => sum + margin, 0) / opMargins.length;
+    const marginVolatility = opMargins.reduce(
+      (sum, margin) => sum + Math.abs(margin - avgMargin), 0
+    ) / opMargins.length;
+    
+    if (marginVolatility < 0.03) {  // Very stable margins
+      score += 2;
+      details.push(`Highly predictable margins: ${(avgMargin * 100).toFixed(1)}% avg with minimal volatility`);
+    } else if (marginVolatility < 0.07) {  // Moderately stable margins
+      score += 1;
+      details.push(`Moderately predictable margins: ${(avgMargin * 100).toFixed(1)}% avg with some volatility`);
+    } else {
+      details.push(`Unpredictable margins: ${(avgMargin * 100).toFixed(1)}% avg with high volatility (${(marginVolatility * 100).toFixed(1)}%)`);
+    }
+  } else {
+    details.push("Insufficient margin history");
+  }
+  
+  // 4. Cash generation reliability
+  const fcfItems = financialLineItems.filter(item => 
+    item.line_item === "free_cash_flow" && item.value !== null
+  );
+  
+  if (fcfItems.length >= 5) {
+    const fcfValues = fcfItems.map(item => item.value);
+    
+    // Count positive FCF periods
+    const positiveFcfPeriods = fcfValues.filter(fcf => fcf > 0).length;
+    
+    if (positiveFcfPeriods === fcfValues.length) {
+      // Consistently positive FCF
+      score += 2;
+      details.push("Highly predictable cash generation: Positive FCF in all periods");
+    } else if (positiveFcfPeriods >= fcfValues.length * 0.8) {
+      // Mostly positive FCF
+      score += 1;
+      details.push(`Predictable cash generation: Positive FCF in ${positiveFcfPeriods}/${fcfValues.length} periods`);
+    } else {
+      details.push(`Unpredictable cash generation: Positive FCF in only ${positiveFcfPeriods}/${fcfValues.length} periods`);
+    }
+  } else {
+    details.push("Insufficient free cash flow history");
+  }
+  
+  // Scale score to 0-10 range
+  // Maximum possible raw score would be 10 (3+3+2+2)
+  const finalScore = Math.min(10, score * 10 / 10);
+  
+  return {
+    score: finalScore,
+    details: details.join("; ")
+  };
+}
+
+/**
+ * Calculate intrinsic value using Munger's approach focusing on owner earnings
+ */
+export function calculateMungerValuation(
+  financialLineItems: LineItem[],
+  marketCap: number | null
+): {
+  score: number;
+  details: string;
+  intrinsicValueRange?: {
+    conservative: number;
+    reasonable: number;
+    optimistic: number;
+  };
+  fcfYield?: number;
+  normalizedFcf?: number;
+} {
+  let score = 0;
+  const details: string[] = [];
+  
+  if (!financialLineItems || !marketCap || marketCap <= 0) {
+    return {
+      score: 0,
+      details: "Insufficient data to perform valuation"
+    };
+  }
+  
+  // Get FCF values (Munger's preferred "owner earnings" metric)
+  const fcfValues: number[] = [];
+  for (const item of financialLineItems) {
+    if (item.line_item === "free_cash_flow" && item.value !== null) {
+      fcfValues.push(item.value);
+    }
+  }
+  
+  if (!fcfValues.length || fcfValues.length < 3) {
+    return {
+      score: 0,
+      details: "Insufficient free cash flow data for valuation"
+    };
+  }
+  
+  // 1. Normalize earnings by taking average of last 3-5 years
+  // (Munger prefers to normalize earnings to avoid over/under-valuation based on cyclical factors)
+  const periodsToAverage = Math.min(5, fcfValues.length);
+  const normalizedFcf = fcfValues
+    .slice(0, periodsToAverage)
+    .reduce((sum, val) => sum + val, 0) / periodsToAverage;
+  
+  if (normalizedFcf <= 0) {
+    return {
+      score: 0,
+      details: `Negative or zero normalized FCF (${normalizedFcf}), cannot value`
+    };
+  }
+  
+  // 2. Calculate FCF yield (inverse of P/FCF multiple)
+  const fcfYield = normalizedFcf / marketCap;
+  
+  // 3. Apply Munger's FCF multiple based on business quality
+  // Munger would pay higher multiples for wonderful businesses
+  if (fcfYield > 0.08) {  // >8% FCF yield (P/FCF < 12.5x)
+    score += 4;
+    details.push(`Excellent value: ${(fcfYield * 100).toFixed(1)}% FCF yield`);
+  } else if (fcfYield > 0.05) {  // >5% FCF yield (P/FCF < 20x)
+    score += 3;
+    details.push(`Good value: ${(fcfYield * 100).toFixed(1)}% FCF yield`);
+  } else if (fcfYield > 0.03) {  // >3% FCF yield (P/FCF < 33x)
+    score += 1;
+    details.push(`Fair value: ${(fcfYield * 100).toFixed(1)}% FCF yield`);
+  } else {
+    details.push(`Expensive: Only ${(fcfYield * 100).toFixed(1)}% FCF yield`);
+  }
+  
+  // 4. Calculate simple intrinsic value range
+  // Munger tends to use straightforward valuations, avoiding complex DCF models
+  const conservativeValue = normalizedFcf * 10;  // 10x FCF = 10% yield
+  const reasonableValue = normalizedFcf * 15;    // 15x FCF ≈ 6.7% yield
+  const optimisticValue = normalizedFcf * 20;    // 20x FCF = 5% yield
+  
+  // 5. Calculate margins of safety
+  const currentToReasonable = (reasonableValue - marketCap) / marketCap;
+  
+  if (currentToReasonable > 0.3) {  // >30% upside
+    score += 3;
+    details.push(`Large margin of safety: ${(currentToReasonable * 100).toFixed(1)}% upside to reasonable value`);
+  } else if (currentToReasonable > 0.1) {  // >10% upside
+    score += 2;
+    details.push(`Moderate margin of safety: ${(currentToReasonable * 100).toFixed(1)}% upside to reasonable value`);
+  } else if (currentToReasonable > -0.1) {  // Within 10% of reasonable value
+    score += 1;
+    details.push(`Fair price: Within 10% of reasonable value (${(currentToReasonable * 100).toFixed(1)}%)`);
+  } else {
+    details.push(`Expensive: ${(-currentToReasonable * 100).toFixed(1)}% premium to reasonable value`);
+  }
+  
+  // 6. Check earnings trajectory for additional context
+  // Munger likes growing owner earnings
+  if (fcfValues.length >= 3) {
+    const recentAvg = (fcfValues[0] + fcfValues[1] + fcfValues[2]) / 3;
+    const olderAvg = fcfValues.length >= 6 
+      ? (fcfValues[fcfValues.length-1] + fcfValues[fcfValues.length-2] + fcfValues[fcfValues.length-3]) / 3
+      : fcfValues[fcfValues.length-1];
+    
+    if (recentAvg > olderAvg * 1.2) {  // >20% growth in FCF
+      score += 3;
+      details.push("Growing FCF trend adds to intrinsic value");
+    } else if (recentAvg > olderAvg) {
+      score += 2;
+      details.push("Stable to growing FCF supports valuation");
+    } else {
+      details.push("Declining FCF trend is concerning");
+    }
+  }
+  
+  // Scale score to 0-10 range
+  // Maximum possible raw score would be 10 (4+3+3)
+  const finalScore = Math.min(10, score * 10 / 10);
+  
+  return {
+    score: finalScore,
+    details: details.join("; "),
+    intrinsicValueRange: {
+      conservative: conservativeValue,
+      reasonable: reasonableValue,
+      optimistic: optimisticValue
+    },
+    fcfYield: fcfYield,
+    normalizedFcf: normalizedFcf
+  };
+}
+
+interface CharlieMungerSignal {
+  signal: "bullish" | "bearish" | "neutral";
+  confidence: number;
+  reasoning: string;
+}
+
+/**
+ * Generates investment decisions in the style of Charlie Munger using an LLM
+ */
+export async function generateMungerOutput(
+  ticker: string,
+  analysis_data: Record<string, any>,
+  model_name: string,
+  model_provider: string
+): Promise<CharlieMungerSignal> {
+  // Create system prompt
+  const systemPrompt = `You are a Charlie Munger AI agent, making investment decisions using his principles:
+
+  1. Focus on the quality and predictability of the business.
+  2. Rely on mental models from multiple disciplines to analyze investments.
+  3. Look for strong, durable competitive advantages (moats).
+  4. Emphasize long-term thinking and patience.
+  5. Value management integrity and competence.
+  6. Prioritize businesses with high returns on invested capital.
+  7. Pay a fair price for wonderful businesses.
+  8. Never overpay, always demand a margin of safety.
+  9. Avoid complexity and businesses you don't understand.
+  10. "Invert, always invert" - focus on avoiding stupidity rather than seeking brilliance.
+  
+  Rules:
+  - Praise businesses with predictable, consistent operations and cash flows.
+  - Value businesses with high ROIC and pricing power.
+  - Prefer simple businesses with understandable economics.
+  - Admire management with skin in the game and shareholder-friendly capital allocation.
+  - Focus on long-term economics rather than short-term metrics.
+  - Be skeptical of businesses with rapidly changing dynamics or excessive share dilution.
+  - Avoid excessive leverage or financial engineering.
+  - Provide a rational, data-driven recommendation (bullish, bearish, or neutral).
+  
+  When providing your reasoning, be thorough and specific by:
+  1. Explaining the key factors that influenced your decision the most (both positive and negative)
+  2. Applying at least 2-3 specific mental models or disciplines to explain your thinking
+  3. Providing quantitative evidence where relevant (e.g., specific ROIC values, margin trends)
+  4. Citing what you would "avoid" in your analysis (invert the problem)
+  5. Using Charlie Munger's direct, pithy conversational style in your explanation`;
+  
+  // Create user prompt
+  const userPrompt = `Based on the following analysis, create a Munger-style investment signal.
+
+  Analysis Data for ${ticker}:
+  ${JSON.stringify(analysis_data, null, 2)}
+  
+  Return the trading signal in this JSON format:
+  {
+    "signal": "bullish/bearish/neutral",
+    "confidence": float (0-100),
+    "reasoning": "string"
+  }`;
+
+  try {
+    // Call LLM with prompt
+    // This is a simplified version - in a real implementation you would use your
+    // preferred LLM client like OpenAI, Anthropic, etc.
+    const response = await callLLM(systemPrompt, userPrompt, model_name, model_provider);
+    return parseResponse(response);
+  } catch (error) {
+    console.error("Error generating Munger output:", error);
+    return {
+      signal: "neutral",
+      confidence: 0,
+      reasoning: "Error in analysis, defaulting to neutral"
+    };
+  }
+}
