@@ -36,10 +36,10 @@ export const Textarea = ({
         e.preventDefault();
         handleSubmit();
       }}
-      className="relative w-full pt-4"
+      className="relative pt-4 w-full"
     >
       <ShadcnTextarea
-        className="resize-none bg-secondary w-full rounded-2xl pr-12 pt-4 pb-16"
+        className="pt-4 pr-12 pb-16 w-full rounded-2xl resize-none bg-secondary"
         value={input}
         autoFocus
         placeholder="Say something..."
@@ -60,10 +60,10 @@ export const Textarea = ({
         <button
           type="button"
           onClick={stop}
-          className="cursor-pointer absolute right-2 bottom-2 rounded-full p-2 bg-black hover:bg-zinc-800 disabled:bg-zinc-300 disabled:cursor-not-allowed transition-colors"
+          className="absolute right-2 bottom-2 p-2 bg-black rounded-full transition-colors cursor-pointer hover:bg-zinc-800 disabled:bg-zinc-300 disabled:cursor-not-allowed"
         >
-          <div className="animate-spin h-4 w-4">
-            <svg className="h-4 w-4 text-white" viewBox="0 0 24 24">
+          <div className="w-4 h-4 animate-spin">
+            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24">
               <circle
                 className="opacity-25"
                 cx="12"
@@ -85,9 +85,9 @@ export const Textarea = ({
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
-          className="absolute right-2 bottom-2 rounded-full p-2 bg-black hover:bg-zinc-800 disabled:bg-zinc-300 disabled:dark:bg-zinc-700 dark:disabled:opacity-80 disabled:cursor-not-allowed transition-colors"
+          className="absolute right-2 bottom-2 p-2 bg-black rounded-full transition-colors hover:bg-zinc-800 disabled:bg-zinc-300 disabled:dark:bg-zinc-700 dark:disabled:opacity-80 disabled:cursor-not-allowed"
         >
-          <ArrowUp className="h-4 w-4 text-white" />
+          <ArrowUp className="w-4 h-4 text-white" />
         </button>
       )}
     </form>
