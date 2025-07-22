@@ -1,6 +1,6 @@
 "use client";
 
-import type { Message as TMessage } from "ai";
+import { getToolName, type ReasoningUIPart, type UIMessage } from "ai";
 import { AnimatePresence, motion } from "motion/react";
 import { memo, useCallback, useEffect, useState } from "react";
 import equal from "fast-deep-equal";
@@ -18,14 +18,8 @@ import {
 } from "lucide-react";
 import { SpinnerIcon } from "./icons";
 
-interface ReasoningPart {
-  type: "reasoning";
-  reasoning: string;
-  details: Array<{ type: "text"; text: string }>;
-}
-
 interface ReasoningMessagePartProps {
-  part: ReasoningPart;
+  part: ReasoningUIPart;
   isReasoning: boolean;
 }
 
@@ -101,13 +95,7 @@ export function ReasoningMessagePart({
             variants={variants}
             transition={{ duration: 0.2, ease: "easeInOut" }}
           >
-            {part.details.map((detail, detailIndex) =>
-              detail.type === "text" ? (
-                <Markdown key={detailIndex}>{detail.text}</Markdown>
-              ) : (
-                "<redacted>"
-              ),
-            )}
+            <Markdown>{part.text}</Markdown>
           </motion.div>
         )}
       </AnimatePresence>
@@ -120,7 +108,7 @@ const PurePreviewMessage = ({
   isLatestMessage,
   status,
 }: {
-  message: TMessage;
+  message: UIMessage;
   isLoading: boolean;
   status: "error" | "submitted" | "streaming" | "ready";
   isLatestMessage: boolean;
@@ -169,8 +157,9 @@ const PurePreviewMessage = ({
                       </div>
                     </motion.div>
                   );
-                case "tool-invocation":
-                  const { toolName, state } = part.toolInvocation;
+                // TODO: add your other tools here
+                case "tool-getWeather":
+                  const { state } = part;
 
                   return (
                     <motion.div
@@ -185,20 +174,20 @@ const PurePreviewMessage = ({
                         </div>
                         <div className="flex-1">
                           <div className="font-medium flex items-baseline gap-2">
-                            {state === "call" ? "Calling" : "Called"}{" "}
+                            {state === "input-streaming" ? "Calling" : "Called"}{" "}
                             <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md">
-                              {toolName}
+                              {getToolName(part)}
                             </span>
                           </div>
                         </div>
                         <div className="w-5 h-5 flex items-center justify-center">
-                          {state === "call" ? (
+                          {state === "input-streaming" ? (
                             isLatestMessage && status !== "ready" ? (
                               <Loader2 className="animate-spin h-4 w-4 text-zinc-500" />
                             ) : (
                               <StopCircle className="h-4 w-4 text-red-500" />
                             )
-                          ) : state === "result" ? (
+                          ) : state === "output-available" ? (
                             <CheckCircle size={14} className="text-green-600" />
                           ) : null}
                         </div>
@@ -209,7 +198,6 @@ const PurePreviewMessage = ({
                   return (
                     <ReasoningMessagePart
                       key={`message-${message.id}-${i}`}
-                      // @ts-expect-error part
                       part={part}
                       isReasoning={
                         (message.parts &&
@@ -232,9 +220,6 @@ const PurePreviewMessage = ({
 
 export const Message = memo(PurePreviewMessage, (prevProps, nextProps) => {
   if (prevProps.status !== nextProps.status) return false;
-  if (prevProps.message.annotations !== nextProps.message.annotations)
-    return false;
-  // if (prevProps.message.content !== nextProps.message.content) return false;
   if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
 
   return true;

@@ -10,22 +10,18 @@ import { Header } from "./header";
 import { toast } from "sonner";
 
 export default function Chat() {
+  const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState<modelID>(defaultModel);
-  const { messages, input, handleInputChange, handleSubmit, status, stop } =
-    useChat({
-      maxSteps: 5,
-      body: {
-        selectedModel,
-      },
-      onError: (error) => {
-        toast.error(
-          error.message.length > 0
-            ? error.message
-            : "An error occured, please try again later.",
-          { position: "top-center", richColors: true },
-        );
-      },
-    });
+  const { sendMessage, messages, status, stop } = useChat({
+    onError: (error) => {
+      toast.error(
+        error.message.length > 0
+          ? error.message
+          : "An error occured, please try again later.",
+        { position: "top-center", richColors: true },
+      );
+    },
+  });
 
   const isLoading = status === "streaming" || status === "submitted";
 
@@ -40,13 +36,17 @@ export default function Chat() {
         <Messages messages={messages} isLoading={isLoading} status={status} />
       )}
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => {
+          e.preventDefault();
+          sendMessage({ text: input }, { body: { selectedModel } });
+          setInput("");
+        }}
         className="pb-8 bg-white dark:bg-black w-full max-w-xl mx-auto px-4 sm:px-0"
       >
         <Textarea
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
-          handleInputChange={handleInputChange}
+          handleInputChange={(e) => setInput(e.currentTarget.value)}
           input={input}
           isLoading={isLoading}
           status={status}
