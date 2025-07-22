@@ -2,10 +2,10 @@ import { modelID } from "@/ai/providers";
 import { Textarea as ShadcnTextarea } from "@/components/ui/textarea";
 import { ArrowUp } from "lucide-react";
 import { ModelPicker } from "./model-picker";
+import { useState } from "react";
 
 interface InputProps {
-  input: string;
-  handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSubmit: (text: string) => void;
   isLoading: boolean;
   status: string;
   stop: () => void;
@@ -14,31 +14,40 @@ interface InputProps {
 }
 
 export const Textarea = ({
-  input,
-  handleInputChange,
+  onSubmit,
   isLoading,
   status,
   stop,
   selectedModel,
   setSelectedModel,
 }: InputProps) => {
+  const [input, setInput] = useState("");
+
+  const handleSubmit = () => {
+    if (input.trim() && !isLoading) {
+      onSubmit(input);
+      setInput("");
+    }
+  };
+
   return (
-    <div className="relative w-full pt-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSubmit();
+      }}
+      className="relative w-full pt-4"
+    >
       <ShadcnTextarea
         className="resize-none bg-secondary w-full rounded-2xl pr-12 pt-4 pb-16"
         value={input}
         autoFocus
-        placeholder={"Say something..."}
-        // @ts-expect-error err
-        onChange={handleInputChange}
+        placeholder="Say something..."
+        onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            if (input.trim() && !isLoading) {
-              // @ts-expect-error err
-              const form = e.target.closest("form");
-              if (form) form.requestSubmit();
-            }
+            handleSubmit();
           }
         }}
       />
@@ -81,6 +90,6 @@ export const Textarea = ({
           <ArrowUp className="h-4 w-4 text-white" />
         </button>
       )}
-    </div>
+    </form>
   );
 };

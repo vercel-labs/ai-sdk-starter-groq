@@ -1,4 +1,4 @@
-import type { Message as TMessage } from "ai";
+import type { UIMessage as TMessage } from "ai";
 import { Message } from "./message";
 import { useScrollToBottom } from "@/lib/hooks/use-scroll-to-bottom";
 

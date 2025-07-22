@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/groq": "^1.2.5",
-    "@ai-sdk/react": "^1.2.6",
+    "@ai-sdk/groq": "2.0.0-beta.6",
+    "@ai-sdk/react": "2.0.0-beta.25",
     "@opentelemetry/api-logs": "^0.200.0",
     "@opentelemetry/instrumentation": "^0.200.0",
     "@opentelemetry/sdk-logs": "^0.200.0",
@@ -18,7 +18,7 @@
     "@radix-ui/react-select": "^2.1.6",
     "@radix-ui/react-slot": "^1.1.2",
     "@vercel/otel": "^1.10.4",
-    "ai": "^4.3.2",
+    "ai": "5.0.0-beta.25",
     "autoevals": "^0.0.125",
     "braintrust": "^0.0.195",
     "class-variance-authority": "^0.7.1",
@@ -35,7 +35,7 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.2"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
