@@ -95,7 +95,7 @@ export function ReasoningMessagePart({
             variants={variants}
             transition={{ duration: 0.2, ease: "easeInOut" }}
           >
-            <Markdown>{part.text}</Markdown>
+            <Streamdown>{part.text}</Streamdown>
           </motion.div>
         )}
       </AnimatePresence>
