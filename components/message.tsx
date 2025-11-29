@@ -69,7 +69,7 @@ export function ReasoningMessagePart({
               "cursor-pointer rounded-full dark:hover:bg-zinc-800 hover:bg-zinc-200",
               {
                 "dark:bg-zinc-800 bg-zinc-200": isExpanded,
-              },
+              }
             )}
             onClick={() => {
               setIsExpanded(!isExpanded);
@@ -125,7 +125,7 @@ const PurePreviewMessage = ({
         <div
           className={cn(
             "flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl",
-            "group-data-[role=user]/message:w-fit",
+            "group-data-[role=user]/message:w-fit"
           )}
         >
           {message.role === "assistant" && (
@@ -221,6 +221,17 @@ const PurePreviewMessage = ({
 export const Message = memo(PurePreviewMessage, (prevProps, nextProps) => {
   if (prevProps.status !== nextProps.status) return false;
   if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
+  // Always re-render during streaming for the latest assistant message.
+  // The AI SDK mutates part.text in-place, so fast-deep-equal cannot detect changes.
+  const isStreaming =
+    nextProps.status === "streaming" || nextProps.status === "submitted";
+  if (
+    isStreaming &&
+    nextProps.isLatestMessage &&
+    nextProps.message.role === "assistant"
+  ) {
+    return false;
+  }
 
   return true;
 });
