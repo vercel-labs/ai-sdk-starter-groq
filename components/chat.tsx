@@ -13,12 +13,14 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState<modelID>(defaultModel);
   const { sendMessage, messages, status, stop } = useChat({
+    // Throttle UI updates to 50ms intervals for smooth streaming without overwhelming React
+    experimental_throttle: 50,
     onError: (error) => {
       toast.error(
         error.message.length > 0
           ? error.message
           : "An error occured, please try again later.",
-        { position: "top-center", richColors: true },
+        { position: "top-center", richColors: true }
       );
     },
   });
